@@ -1,0 +1,532 @@
+# AI Opportunity Radar — Source Registry
+# Spec ref: SPEC.md §22 (Source Registry), §3 (Phase 1: 30 core sources)
+#
+# Fields:
+#   source_id        : unique slug (lowercase, no spaces)
+#   name             : human-readable
+#   country          : origin / primary region
+#   category         : news | ai | developer | community | startup | ecommerce | finance | policy | research | app | podcast
+#   type             : api | rss | html | dataset
+#   url              : canonical URL
+#   api_endpoint     : primary fetch endpoint (if API)
+#   rss_url          : RSS/Atom URL (if RSS)
+#   legal_level      : public | registered | restricted
+#   update_frequency : realtime | hourly | daily | weekly
+#   enabled          : boolean — actually collected by Phase 2+
+#   priority         : S | A | B | C | D
+
+sources:
+
+  # ── Tier 1: AI official / frontier labs ──────────────────────────
+  - source_id: openai_blog
+    name: OpenAI Blog
+    country: US
+    category: ai
+    type: rss
+    url: https://openai.com/blog
+    rss_url: https://openai.com/blog/rss.xml
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: S
+
+  - source_id: anthropic_sdk
+    name: Anthropic SDK Releases (GitHub)
+    country: US
+    category: ai
+    type: rss
+    url: https://github.com/anthropics
+    rss_url: https://github.com/anthropics/anthropic-sdk-python/releases.atom
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+    notes: "Anthropic has no public blog RSS. GitHub releases Atom feed is the best public signal for Anthropic SDK progress."
+
+  - source_id: google_ai_blog
+    name: Google AI Blog
+    country: US
+    category: ai
+    type: rss
+    url: https://blog.google/technology/ai/
+    rss_url: https://blog.google/technology/ai/rss/
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: S
+
+  - source_id: anthropic_news
+    name: Anthropic News
+    country: US
+    category: ai
+    type: rss
+    url: https://www.anthropic.com/news
+    rss_url: https://www.anthropic.com/news/rss.xml
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: S
+    notes: "No public RSS feed. Replaced by anthropic_sdk GitHub mirror."
+
+  # ── Tier 2: Dev / community ──────────────────────────────────────
+  - source_id: hackernews
+    name: Hacker News
+    country: US
+    category: developer
+    type: api
+    url: https://news.ycombinator.com/
+    api_endpoint: https://hacker-news.firebaseio.com/v0
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    tier: slow
+    priority: S
+
+  - source_id: hackernews_best
+    name: Hacker News (best stories)
+    country: US
+    category: developer
+    type: rss
+    url: https://news.ycombinator.com/best
+    rss_url: https://hnrss.org/best
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    tier: fast
+    priority: A
+    notes: "Lower volume, higher-quality than top via hnrss.org mirror."
+
+  - source_id: reddit_rss
+    name: Reddit (RSS multi-sub fan-in)
+    country: global
+    category: community
+    type: rss
+    url: https://www.reddit.com/
+    rss_url: https://www.reddit.com/r/MachineLearning/.rss
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    tier: slow
+    priority: B
+    notes: "Subscribes to r/MachineLearning, r/artificial, r/LocalLLaMA, r/ClaudeAI, r/OpenAI, r/startups, r/Entrepreneur via RedditRSSCollector."
+
+  - source_id: lobsters
+    name: Lobsters
+    country: US
+    category: community
+    type: rss
+    url: https://lobste.rs/
+    rss_url: https://lobste.rs/rss
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+    notes: "Tech-focused, invite-only. 17K valid RSS."
+
+  - source_id: lwn
+    name: LWN.net
+    country: US
+    category: tech
+    type: rss
+    url: https://lwn.net/
+    rss_url: https://lwn.net/headlines/rss
+    legal_level: public
+    update_frequency: daily
+    enabled: true
+    priority: A
+    notes: "Linux Weekly News — deep tech coverage."
+
+  - source_id: v2ex
+    name: V2EX (all topics)
+    country: CN
+    category: community
+    type: rss
+    url: https://www.v2ex.com/
+    rss_url: https://www.v2ex.com/index.xml
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: B
+    notes: "Original JSON API failed; RSS at /index.xml works (62K valid XML)."
+
+  # ── Tier 3: Research ─────────────────────────────────────────────
+  - source_id: arxiv
+    name: arXiv
+    country: global
+    category: research
+    type: api
+    url: https://arxiv.org/
+    api_endpoint: https://export.arxiv.org/api/query
+    legal_level: public
+    update_frequency: daily
+    enabled: true
+    priority: S
+
+  # ── Tier 4: News (EN) ───────────────────────────────────────────
+  - source_id: techcrunch
+    name: TechCrunch
+    country: US
+    category: news
+    type: rss
+    url: https://techcrunch.com/
+    rss_url: https://techcrunch.com/feed/
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+
+  - source_id: theverge
+    name: The Verge
+    country: US
+    category: news
+    type: rss
+    url: https://www.theverge.com/
+    rss_url: https://www.theverge.com/rss/index.xml
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+
+  - source_id: google_news
+    name: Google News (US top stories)
+    country: global
+    category: news
+    type: rss
+    url: https://news.google.com/
+    rss_url: https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+    notes: "General English top-stories. Replaces GDELT for breadth coverage."
+
+  - source_id: cnbc
+    name: CNBC
+    country: US
+    category: news
+    type: rss
+    url: https://www.cnbc.com/
+    rss_url: https://www.cnbc.com/id/100003114/device/rss/rss.html
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+
+  - source_id: reuters
+    name: Reuters
+    country: global
+    category: news
+    type: rss
+    url: https://www.reuters.com/
+    rss_url: https://www.reutersagency.com/feed/?best-topics=top-news
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+
+  - source_id: google_trends
+    name: Google Trends
+    country: global
+    category: news
+    type: api
+    url: https://trends.google.com/trends/trendingsearches/daily
+    api_endpoint: https://trends.google.com/trends/api/dailytrends
+    legal_level: public
+    update_frequency: daily
+    enabled: false
+    priority: A
+
+  - source_id: google_news_rss_legacy
+    name: Google News (legacy RSS)
+    country: global
+    category: news
+    type: rss
+    url: https://news.google.com/
+    rss_url: https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+
+  # ── Tier 5: News (CN) ────────────────────────────────────────────
+  - source_id: kr36
+    name: 36氪
+    country: CN
+    category: news
+    type: rss
+    url: https://36kr.com/
+    rss_url: https://36kr.com/feed
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+    notes: "Disabled: /feed returns anti-bot HTML page (verified 2026-09-08)."
+
+  - source_id: huxiu
+    name: 虎嗅
+    country: CN
+    category: news
+    type: rss
+    url: https://www.huxiu.com/
+    rss_url: https://www.huxiu.com/feed.html
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+
+  - source_id: geekpark
+    name: 极客公园
+    country: CN
+    category: news
+    type: rss
+    url: https://www.geekpark.net/
+    rss_url: https://feeds.feedburner.com/geekpark
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+    notes: "Original /feed was 404; switched to FeedBurner mirror (50K valid XML)."
+
+  - source_id: qbitai
+    name: 量子位
+    country: CN
+    category: ai
+    type: rss
+    url: https://www.qbitai.com/
+    rss_url: https://www.qbitai.com/feed
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+    notes: "Enabled with FallbackFetcher (curl handles SSL EOF that urllib hits)."
+
+  - source_id: jiqizhixin
+    name: 机器之心
+    country: CN
+    category: ai
+    type: rss
+    url: https://www.jiqizhixin.com/
+    rss_url: https://www.jiqizhixin.com/rss
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: A
+    notes: "Disabled: /rss returns malformed XML (invalid token at line 7 col 82)."
+
+  - source_id: sspai
+    name: 少数派
+    country: CN
+    category: community
+    type: rss
+    url: https://sspai.com/
+    rss_url: https://sspai.com/feed
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: B
+
+  - source_id: synced
+    name: 新智元
+    country: CN
+    category: ai
+    type: rss
+    url: https://synced.com/
+    rss_url: https://synced.com/feed
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    priority: A
+
+  - source_id: indiehackers
+    name: Indie Hackers
+    country: global
+    category: startup
+    type: rss
+    url: https://www.indiehackers.com/
+    rss_url: https://www.indiehackers.com/feed
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: B
+
+  - source_id: v2ex_legacy
+    name: V2EX (legacy JSON API)
+    country: CN
+    category: community
+    type: api
+    url: https://www.v2ex.com/
+    api_endpoint: https://www.v2ex.com/api/topics/hot.json
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: B
+
+  - source_id: github_trending
+    name: GitHub Trending
+    country: global
+    category: developer
+    type: html
+    url: https://github.com/trending
+    legal_level: public
+    update_frequency: daily
+    enabled: false
+    priority: B
+    notes: "No official API. Replaced by github_releases watchlist."
+
+  - source_id: github_releases
+    name: GitHub Releases (watchlist)
+    country: global
+    category: developer
+    type: api
+    url: https://github.com/
+    api_endpoint: https://api.github.com/repos
+    legal_level: public
+    update_frequency: realtime
+    enabled: true
+    tier: slow
+    priority: A
+    notes: "Watches AI/agent repos. Set GITHUB_TOKEN for 5000 req/h vs default 60."
+
+  # ── Tier 6: Lower priority / disabled ───────────────────────────
+  - source_id: huggingface_papers
+    name: Hugging Face Papers
+    country: global
+    category: research
+    type: html
+    url: https://huggingface.co/papers
+    legal_level: public
+    update_frequency: daily
+    enabled: false
+    priority: A
+
+  - source_id: microsoft_ai_blog
+    name: Microsoft AI Blog
+    country: US
+    category: ai
+    type: rss
+    url: https://blogs.microsoft.com/ai/
+    rss_url: https://blogs.microsoft.com/ai/feed/
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: S
+
+  - source_id: nvidia_blog
+    name: NVIDIA Blog
+    country: US
+    category: ai
+    type: rss
+    url: https://blogs.nvidia.com/
+    rss_url: https://blogs.nvidia.com/feed/
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: S
+
+  - source_id: producthunt
+    name: Product Hunt
+    country: US
+    category: startup
+    type: api
+    url: https://www.producthunt.com/
+    api_endpoint: https://api.producthunt.com/v2/api/graphql
+    legal_level: registered
+    update_frequency: realtime
+    enabled: false
+    priority: A
+    notes: "Requires OAuth token."
+
+  - source_id: youtube_trending
+    name: YouTube Trending
+    country: global
+    category: community
+    type: api
+    url: https://www.youtube.com/feed/trending
+    api_endpoint: https://www.googleapis.com/youtube/v3/videos
+    legal_level: registered
+    update_frequency: hourly
+    enabled: false
+    priority: B
+    notes: "Requires YouTube Data API key."
+
+  - source_id: weibo
+    name: 微博热搜
+    country: CN
+    category: community
+    type: html
+    url: https://s.weibo.com/top/summary
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: C
+    notes: "Anti-bot detection blocks scraping."
+
+  - source_id: zhihu
+    name: 知乎热榜
+    country: CN
+    category: community
+    type: api
+    url: https://www.zhihu.com/
+    api_endpoint: https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: C
+    notes: "Fragile public API; returns 401 unauth."
+
+  - source_id: gdelt
+    name: GDELT Project
+    country: global
+    category: news
+    type: api
+    url: https://www.gdeltproject.org/
+    api_endpoint: https://api.gdeltproject.org/api/v2/doc/doc
+    legal_level: public
+    update_frequency: realtime
+    enabled: false
+    priority: S
+    notes: "Disabled: DOC API returns no body/snippet (only title/url); unreliable (429/SSL/timeout). Replaced by Google News RSS."
+
+# ── Aggregate summary (informational, not used by code) ────────────────
+summary:
+  total: 32
+  enabled: 18
+  enabled_ids:
+    - hackernews
+    - arxiv
+    - openai_blog
+    - google_ai_blog
+    - techcrunch
+    - theverge
+    - qbitai
+    - reddit_rss
+    - github_releases
+    - sspai
+    - synced
+    - google_news
+    - anthropic_sdk
+    - hackernews_best
+    - lobsters
+    - lwn
+    - geekpark
+    - v2ex
+  disabled:
+    kr36: "RSS endpoint returns anti-bot HTML"
+    jiqizhixin: "/rss returns malformed XML"
+    gdelt: "DOC API has no body; unreliable"
+    huxiu: "feed.html returns 405"
+    anthropic_news: "no public RSS feed (using anthropic_sdk GitHub mirror)"
+    github_trending: "no official API (using github_releases watchlist)"
+    producthunt: "needs OAuth"
+    youtube_trending: "needs API key"
+    weibo: "anti-scraping"
+    zhihu: "fragile API, returns 401"
+    huggingface_papers: "no RSS"
+    microsoft_ai_blog: "RSS endpoint unverified"
+    nvidia_blog: "RSS endpoint unverified"
+    indiehackers: "RSS endpoint unverified"
+    cnbc: "RSS endpoint unverified"
+    reuters: "RSS endpoint unverified"
+    google_trends: "API endpoint unverified"
+    google_news_rss_legacy: "duplicate of google_news"
+    v2ex_legacy: "duplicate of v2ex"
