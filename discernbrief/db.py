@@ -99,6 +99,10 @@ class Database:
             ("sources", "consecutive_failures", "INTEGER DEFAULT 0"),
             ("sources", "disabled_reason", "TEXT"),
             ("sources", "disabled_at", "TEXT"),
+            # v0.3.0: bitable sync state
+            ("signals", "synced_to_bitable_at", "TEXT"),
+            ("signals", "bitable_data_record_id", "TEXT"),
+            ("signals", "bitable_opps_record_id", "TEXT"),
         ]
         with self.connect() as conn:
             for table, column, decl in migrations:
@@ -298,6 +302,14 @@ class Database:
         with self.connect() as conn:
             return conn.execute("SELECT COUNT(*) AS n FROM signals").fetchone()["n"]
 
+    def count_unsynced_signals(self) -> int:
+        """Signals that have not yet been pushed to Feishu Bitable."""
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) AS n FROM signals WHERE synced_to_bitable_at IS NULL"
+            ).fetchone()["n"]
+
+
     def list_signals(self, limit: int = 20, importance: str | None = None) -> list[dict]:
         with self.connect() as conn:
             sql = "SELECT * FROM signals"
@@ -309,6 +321,29 @@ class Database:
             params.append(limit)
             rows = conn.execute(sql, params).fetchall()
             return [dict(r) for r in rows]
+
+    def unsynced_signals(self) -> list[dict]:
+        """Signals not yet synced to Feishu Bitable (oldest first)."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM signals WHERE synced_to_bitable_at IS NULL "
+                "ORDER BY id ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def mark_signal_synced(self, signal_id: int, data_record_id: str | None,
+                           opps_record_id: str | None) -> None:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE signals SET synced_to_bitable_at=?, "
+                "bitable_data_record_id=COALESCE(?, bitable_data_record_id), "
+                "bitable_opps_record_id=COALESCE(?, bitable_opps_record_id) "
+                "WHERE id=?",
+                (now, data_record_id, opps_record_id, signal_id),
+            )
+            conn.commit()
 
     def list_runs(self, limit: int = 10) -> list[dict]:
         with self.connect() as conn:
