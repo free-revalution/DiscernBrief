@@ -22,3 +22,6 @@ data/*.db-wal
 # Local caches
 .tmp/
 *.tmp
+cache/
+cache/**
+!cache/.gitkeep

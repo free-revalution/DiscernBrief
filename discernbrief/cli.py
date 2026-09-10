@@ -773,8 +773,12 @@ def main(argv: list[str] | None = None) -> int:
     p_filter_run.add_argument("--write-prompt", help="(manual) write prompt to file instead of stdin")
 
     p_export = sub.add_parser("export-xlsx", help="export signals+raw_items to .xlsx (for daily morning briefing)")
-    p_export.add_argument("--days", type=int, default=1)
-    p_export.add_argument("--out", required=True, help="output .xlsx path")
+    p_export.add_argument("--days", type=int, default=1, help="look back N days (default 1)")
+    p_export.add_argument("--out", help="output .xlsx path (required unless --daily)")
+    p_export.add_argument("--daily", action="store_true",
+                          help="auto-organize output under cache/excel/YYYY-MM-DD/DiscernBrief-YYYY-MM-DD.xlsx (uses Asia/Shanghai date)")
+    p_export.add_argument("--tz", default="Asia/Shanghai",
+                          help="IANA timezone for --daily date stamp (default: Asia/Shanghai)")
 
     p_signals = sub.add_parser("signals", help="list generated signals")
 
@@ -864,12 +868,36 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def cmd_export_xlsx(args, registry, db) -> int:
-    """Export signals/raw_items to Excel (for daily morning briefing)."""
+    """Export signals/raw_items to Excel (for daily morning briefing).
+
+    Modes:
+      --out PATH      write to explicit path (parent dirs auto-created)
+      --daily         auto-organize under cache/excel/YYYY-MM-DD/DiscernBrief-YYYY-MM-DD.xlsx
+                      (date stamp uses --tz, default Asia/Shanghai)
+    """
     import xlsxwriter
     from datetime import datetime, timezone, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        ZoneInfo = None  # Python <3.9 fallback
     days = int(args.days)
-    out = Path(args.out).expanduser()
-    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resolve output path
+    if args.daily:
+        if ZoneInfo:
+            tz = ZoneInfo(args.tz)
+            today = datetime.now(tz).strftime("%Y-%m-%d")
+        else:
+            today = datetime.now().strftime("%Y-%m-%d")
+        out = REPO_ROOT / "cache" / "excel" / today / f"DiscernBrief-{today}.xlsx"
+        out.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        if not args.out:
+            print("ERROR: --out is required unless --daily is set.", file=sys.stderr)
+            return 2
+        out = Path(args.out).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with db.connect() as conn:
         sigs = conn.execute("""
