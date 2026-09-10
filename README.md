@@ -150,7 +150,7 @@ python3 -m discernbrief.cli sync-bitable
 |---|---|
 | `sources` | source_id, name, country, category, type, enabled, priority, **tier (fast/slow)**, consecutive_failures, disabled_reason, disabled_at |
 | `raw_items` | source_id, external_id, url, title, content, **published_at (源发布时间)**, content_hash, **collected_at (本地抓取时间)**, metadata |
-| `signals` | id, title, summary, why_it_matters, business_angle, category, importance, confidence, source_urls, raw_item_ids, **published_at, created_at**, synced_to_bitable_at, bitable_data_record_id, bitable_opps_record_id |
+| `signals` | id, title, summary, why_it_matters, business_angle, category, importance, confidence, source_urls, raw_item_ids, **published_at, created_at**, ingested_at |
 | `signal_raw_items` | signal_id ↔ raw_id（多对多 join）|
 | `runs` | started_at, finished_at, source_count, raw_item_count, status, error |
 
@@ -179,16 +179,10 @@ python3 -m discernbrief.cli sync-bitable
 
 阈值默认 **2**（连续失败 ≥2 → 自动 `enabled=0` + 写 `disabled_reason`）。
 
-## 飞书 Bitable 映射
+## 飞书同步（已废弃）
 
-两个 base，agentTurn 触发后自动 `sync-bitable`：
-
-| Base | Table | 内容 |
-|---|---|---|
-| `Data` (KJynb...) | `数据表` | 全部 signal：raw data (title, url, source, category, importance, summary, published_at, raw_id) |
-| `Opportunities` (Wfn6...) | `Opportunities` | HIGH + MEDIUM（带 why_it_matters, business_angle, confidence, source_data_raw_id）|
-
-字段类型：1=文本 / 2=数字 / 3=单选 / 5=日期 / 15=链接。
+项目不再支持飞书 Bitable 同步 — 之前因为 5000 行上限 + cron 触发 → 反复 ModuleNotFoundError 卡死飞书。
+数据现在只存本地 SQLite，导出走 `export-xlsx`。
 
 ## 已知限制
 
@@ -212,7 +206,7 @@ DiscernBrief/
 ├── sources.yaml                    # Source Registry（32 源）
 ├── discernbrief/
 │   ├── __init__.py
-│   ├── cli.py                      # argparse 入口（含 4 个 cmd_export_xlsx/cmd_report/cmd_sync_bitable/cmd_backup/cmd_query）
+│   ├── cli.py                      # argparse 入口（cmd_ingest/run-cycle/filter/report/export-xlsx/backup/query）
 │   ├── config.py                   # Registry + SourceConfig dataclass
 │   ├── db.py                       # SQLite schema + 轻量 migration
 │   ├── models.py                   # RawItem / RunResult
