@@ -23,7 +23,26 @@ from .dedup import dedup_by_title
 from .models import RunResult
 from .normalize import normalize_many
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+def locate_radar_dir():
+    """Auto-discover the DiscernBrief project dir. Honors $DISCERNBRIEF_DIR first."""
+    import os
+    from pathlib import Path
+    env = os.environ.get("DISCERNBRIEF_DIR")
+    if env and Path(env).exists():
+        return Path(env)
+    candidates = [
+        Path.home() / ".openclbrief" / "workspace" / "skills" / "discernbrief",
+        Path.home() / ".openclaw" / "workspace" / "projects" / "DiscernBrief",
+        Path.home() / "Projects" / "DiscernBrief",
+        Path("/tmp/DiscernBrief_pkg"),
+        Path.cwd(),
+    ]
+    for p in candidates:
+        if (p / "discernbrief" / "cli.py").exists():
+            return p
+    return None
+
+REPO_ROOT = locate_radar_dir() or Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO_ROOT / "sources.yaml"
 DEFAULT_DB = REPO_ROOT / "data" / "discernbrief.db"
 
