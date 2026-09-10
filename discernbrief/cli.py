@@ -399,6 +399,8 @@ def cmd_backup(args, registry, db) -> int:
     out_dir = _P(args.out).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    stamp = _dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
     # staleness-safe: if a backup for the current minute already exists, bump
     suffix = ""
     i = 0
@@ -775,60 +777,7 @@ def main(argv: list[str] | None = None) -> int:
     p_export.add_argument("--out", required=True, help="output .xlsx path")
 
     p_signals = sub.add_parser("signals", help="list generated signals")
-def cmd_export_xlsx(args, registry, db) -> int:
-    """Export signals/raw_items to Excel (for daily morning briefing)."""
-    import xlsxwriter
-    from datetime import datetime, timezone, timedelta
-    days = int(args.days)
-    out = Path(args.out).expanduser()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    with db.connect() as conn:
-        sigs = conn.execute("""
-            SELECT id,title,summary,why_it_matters,business_angle,
-                   category,importance,confidence,source_urls,published_at,created_at
-            FROM signals WHERE created_at >= ?
-            ORDER BY (CASE importance WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END),
-                     confidence DESC, id DESC
-        """, (since,)).fetchall()
-        raws = conn.execute("""
-            SELECT id,source_id,title,url,published_at,collected_at
-            FROM raw_items WHERE collected_at >= ?
-            ORDER BY collected_at DESC
-        """, (since,)).fetchall()
-    wb = xlsxwriter.Workbook(str(out))
-    bold = wb.add_format({"bold": True, "bg_color": "#DDDDDD"})
-    date_fmt = wb.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"})
-    ws1 = wb.add_worksheet("signals")
-    h1 = ["id","created_at","importance","category","title","summary",
-          "why_it_matters","business_angle","confidence","url","published_at"]
-    for c,h in enumerate(h1): ws1.write(0,c,h,bold)
-    for ri,row in enumerate(sigs,1):
-        for c,h in enumerate(h1):
-            v = row[h] if h in row.keys() else ""
-            if h == "created_at" and v:
-                try: ws1.write_datetime(ri,c,datetime.fromisoformat(v),date_fmt); continue
-                except: pass
-            ws1.write(ri,c,str(v) if v is not None else "")
-    ws1.set_column(0,len(h1)-1,24); ws1.freeze_panes(1,0)
-    ws2 = wb.add_worksheet("raw_items")
-    h2 = ["id","source_id","title","url","published_at","collected_at"]
-    for c,h in enumerate(h2): ws2.write(0,c,h,bold)
-    for ri,row in enumerate(raws,1):
-        for c,h in enumerate(h2):
-            v = row[h] if h in row.keys() else ""
-            for dk in ("published_at","collected_at"):
-                if h==dk and v:
-                    try: ws2.write_datetime(ri,c,datetime.fromisoformat(v),date_fmt); break
-                    except: pass
-            else:
-                ws2.write(ri,c,str(v) if v is not None else "")
-    ws2.set_column(0,len(h2)-1,30); ws2.freeze_panes(1,0)
-    wb.close()
-    print(f"exported {len(sigs)} signals + {len(raws)} raw_items -> {out}")
-    if not sigs:
-        print("  (note: signals sheet empty — no agent judgments yet. raw_items are unjudged; ingest-signals after each cycle to fill the signals sheet)")
-    return 0
+
 
 
 
@@ -912,6 +861,62 @@ def cmd_export_xlsx(args, registry, db) -> int:
     parser.print_help()
     return 1
 
+
+
+def cmd_export_xlsx(args, registry, db) -> int:
+    """Export signals/raw_items to Excel (for daily morning briefing)."""
+    import xlsxwriter
+    from datetime import datetime, timezone, timedelta
+    days = int(args.days)
+    out = Path(args.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with db.connect() as conn:
+        sigs = conn.execute("""
+            SELECT id,title,summary,why_it_matters,business_angle,
+                   category,importance,confidence,source_urls,published_at,created_at
+            FROM signals WHERE created_at >= ?
+            ORDER BY (CASE importance WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END),
+                     confidence DESC, id DESC
+        """, (since,)).fetchall()
+        raws = conn.execute("""
+            SELECT id,source_id,title,url,published_at,collected_at
+            FROM raw_items WHERE collected_at >= ?
+            ORDER BY collected_at DESC
+        """, (since,)).fetchall()
+    wb = xlsxwriter.Workbook(str(out))
+    bold = wb.add_format({"bold": True, "bg_color": "#DDDDDD"})
+    date_fmt = wb.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"})
+    ws1 = wb.add_worksheet("signals")
+    h1 = ["id","created_at","importance","category","title","summary",
+          "why_it_matters","business_angle","confidence","url","published_at"]
+    for c,h in enumerate(h1): ws1.write(0,c,h,bold)
+    for ri,row in enumerate(sigs,1):
+        for c,h in enumerate(h1):
+            v = row[h] if h in row.keys() else ""
+            if h == "created_at" and v:
+                try: ws1.write_datetime(ri,c,datetime.fromisoformat(v),date_fmt); continue
+                except: pass
+            ws1.write(ri,c,str(v) if v is not None else "")
+    ws1.set_column(0,len(h1)-1,24); ws1.freeze_panes(1,0)
+    ws2 = wb.add_worksheet("raw_items")
+    h2 = ["id","source_id","title","url","published_at","collected_at"]
+    for c,h in enumerate(h2): ws2.write(0,c,h,bold)
+    for ri,row in enumerate(raws,1):
+        for c,h in enumerate(h2):
+            v = row[h] if h in row.keys() else ""
+            for dk in ("published_at","collected_at"):
+                if h==dk and v:
+                    try: ws2.write_datetime(ri,c,datetime.fromisoformat(v),date_fmt); break
+                    except: pass
+            else:
+                ws2.write(ri,c,str(v) if v is not None else "")
+    ws2.set_column(0,len(h2)-1,30); ws2.freeze_panes(1,0)
+    wb.close()
+    print(f"exported {len(sigs)} signals + {len(raws)} raw_items -> {out}")
+    if not sigs:
+        print("  (note: signals sheet empty — no agent judgments yet. raw_items are unjudged; ingest-signals after each cycle to fill the signals sheet)")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
