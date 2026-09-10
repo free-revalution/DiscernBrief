@@ -1026,6 +1026,8 @@ def cmd_export_xlsx(args, registry, db) -> int:
     ws2.set_column(0,len(h2)-1,30); ws2.freeze_panes(1,0)
     wb.close()
     print(f"exported {len(sigs)} signals + {len(raws)} raw_items -> {out}")
+    if not sigs:
+        print("  (note: signals sheet empty — no agent judgments yet. raw_items are unjudged; ingest-signals after each cycle to fill the signals sheet)")
     return 0
 
 
