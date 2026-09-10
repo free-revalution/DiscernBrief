@@ -842,9 +842,17 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run_cycle(args, registry, db)
     if args.cmd == "ingest-fast":
         args.tier = "fast"
+        args.prompt_limit = getattr(args, "prompt_limit", 25)
+        args.force_prompt = getattr(args, "force_prompt", False)
+        args.staged = getattr(args, "staged", False)
+        args.phase = getattr(args, "phase", "auto")
         return cmd_run_cycle(args, registry, db)
     if args.cmd == "ingest-slow":
         args.tier = "slow"
+        args.prompt_limit = getattr(args, "prompt_limit", 25)
+        args.force_prompt = getattr(args, "force_prompt", False)
+        args.staged = getattr(args, "staged", False)
+        args.phase = getattr(args, "phase", "auto")
         return cmd_run_cycle(args, registry, db)
     if args.cmd == "report":
         return cmd_report(args, registry, db)
