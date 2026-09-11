@@ -251,6 +251,14 @@ def _render_zsxq_template(sig: Signal, tpl: dict, n: int) -> str:
     ]
     for u in [x for x in sig.source_urls.split(", ") if x][:3]:
         body_lines.append(f"- {u}")
+    body_lines += ["", "---", "", ZSXQ_COVER_PROMPT.format(
+        title=sig.title,
+        category=sig.category,
+        title_en=sig.title.replace(",", " -"),
+        category_en=sig.category,
+        title_cn=sig.title,
+        category_cn=sig.category,
+    )]
     body = "\n".join(body_lines)
     return wrap_markdown(body, meta, is_paid=True)
 
@@ -272,6 +280,7 @@ def _render_xhs(sig: Signal) -> str:
         angle=sig.business_angle or sig.why_it_matters or "（待补充）",
         tag1=tags[0], tag2=tags[1], tag3=tags[2],
     )
+    body += "\n\n" + XHS_CARDS_PROMPT
     return wrap_markdown(body, meta, is_paid=False)
 
 
@@ -290,6 +299,7 @@ def _render_jike(sig: Signal) -> str:
         summary=sig.summary,
         angle=sig.business_angle or sig.why_it_matters or "（待补充）",
     )
+    body += "\n\n" + JIKE_PROMPT
     return wrap_markdown(body, meta, is_paid=False)
 
 
@@ -308,3 +318,64 @@ def _jike_hook(sig: Signal) -> str:
 def _xhs_tags(sig: Signal) -> list[str]:
     cat = sig.category.replace("/", "·")
     return [f"{cat}观察", "AI情报局", "知识星球订阅"]
+
+
+# === 图片 prompt 建议（用户原文：「最好都能附图」） ===
+# 由 LLM 在填正文时同时产出，供人类 / DALL-E / Midjourney 生成图。
+# 风格要求：现代信息图风格、商业感、避免真人脸。
+ZSXQ_COVER_PROMPT = """封面图 prompt 建议（用于知识星球付费文头图）：
+
+主题：{title}
+关键词：{category}, 深度产业链, 商业格局
+
+风格：现代极简信息图，深色背景（#0F172A / #1E293B），霓虹色调强调关键节点，
+      类似 The Economist / Stratechery 风格
+主体：抽象几何元素 + 数据可视化图表（柱状、流程、关系网）
+      避免真人脸、品牌 logo 侵权
+尺寸：1280×720 (横版) 或 1080×1080 (方版)
+工具：DALL-E 3 / Midjourney v6 / Recraft
+
+提示词参考（中英双语）：
+EN: "Editorial-style infographic about {title_en}. Modern minimalist design, dark navy
+    background, neon accent colors, abstract geometric shapes representing {category} industry
+    relationships, data visualization elements (bar charts, flow diagrams). No human faces,
+    no brand logos. Inspired by The Economist and Stratechery editorial style. 4K, sharp."
+CN: 「关于 {title_cn} 的编辑风格信息图。现代极简设计，深色背景，霓虹色调强调，
+    抽象几何元素表现 {category_cn} 产业链关系，数据可视化元素（柱状图、流程图、关系网）。
+    无人脸、无品牌 logo。4K 高清。」
+"""
+
+XHS_CARDS_PROMPT = """小红书配图 prompt 建议（建议 3-5 张轮播）：
+
+风格：清新信息图 + 高质感排版，深色或米色背景，杂志感
+      适合手机竖屏阅读（3:4 比例）
+工具：DALL-E 3 / 即时设计 / 醒图
+
+第 1 张（封面/钩子）：
+  关键词：{title}, 反直觉, 必看
+  排版：大字标题 + 副标题 + 神秘感配色
+第 2 张（核心数据/事实）：
+  关键词：图表, 关键数字, 对比
+  排版：信息图 + 数据可视化
+第 3 张（深度分析）：
+  关键词：{category}, 产业链, 格局
+  排版：流程图 / 关系网
+第 4 张（行动建议）：
+  关键词：CTA, 行动, 普通人
+  排版：3 条要点 + emoji
+第 5 张（钩回）：
+  关键词：主页, 知识星球, 订阅
+  排版：「完整版在主页」+ 二维码
+
+尺寸：1080×1440 (3:4)
+"""
+
+JIKE_PROMPT = """即刻配图 prompt 建议（可选，文字版更常见）：
+
+风格：极简文字海报，深色背景，浅色大字，类似即刻用户常见排版
+      优先文字版（无图），如果一定要配图就 1:1 方形概念图
+工具：即时设计 / Figma
+
+提示：「关于 {title} 的极简概念图，深色背景，居中布局，
+      上方大字标题，下方一行小字注解。1080×1080。」
+"""
