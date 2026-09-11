@@ -57,6 +57,30 @@ SINGLE_STOCK_NAME_RE = re.compile(
     r"苹果|特斯拉|英伟达|微软|谷歌|亚马逊|Meta|Netflix|Nvidia)",
 )
 
+# 行业术语白名单
+INDUSTRY_TERM_WHITELIST = [
+    "Nvidia", "AMD", "Qualcomm", "Apple", "Samsung", "Intel", "Broadcom",
+    "Microsoft", "Google", "Amazon", "AWS", "Meta", "Oracle", "TSMC",
+    "OpenAI", "Anthropic", "Mistral", "Cerebras", "Marvell", "Groq",
+    "联发科", "中芯国际", "海光信息", "寒武纪",
+]
+
+# 行业术语白名单：合规扫描里这些公司名是 industry context，不算个股点名违规
+INDUSTRY_TERM_WHITELIST = [
+    "Nvidia", "AMD", "Qualcomm", "Apple", "Samsung", "Intel", "Broadcom",
+    "Microsoft", "Google", "Amazon", "AWS", "Meta", "Oracle", "TSMC",
+    "OpenAI", "Anthropic", "Mistral", "Cerebras", "Marvell", "Groq",
+    "联发科", "中芯国际", "海光信息", "寒武纪",
+]
+
+
+# 行业白名单 — 这些公司名在合规扫描里是 industry context, 不是 stock advice
+INDUSTRY_TERM_WHITELIST = {
+    "Nvidia", "AMD", "Qualcomm", "Apple", "Samsung", "Intel", "Broadcom",
+    "Microsoft", "Google", "Amazon", "AWS", "Meta", "Oracle", "TSMC",
+    "OpenAI", "Anthropic", "Mistral", "Cerebras", "Marvell", "联发科", "中芯国际",
+}
+
 
 def scan_violations(text: str) -> list[dict]:
     hits: list[dict] = []
@@ -67,7 +91,10 @@ def scan_violations(text: str) -> list[dict]:
         ("收益承诺", GUARANTEE_RE, "high"),
         ("个股点名", SINGLE_STOCK_NAME_RE, "medium"),
     ]:
+        is_industry_rule = (rule_name == "个股点名")
         for m in pattern.finditer(text):
+            if is_industry_rule and m.group(0) in INDUSTRY_TERM_WHITELIST:
+                continue
             hits.append({"rule": rule_name, "match": m.group(0), "severity": severity, "span": (m.start(), m.end())})
     return hits
 

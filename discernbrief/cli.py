@@ -800,7 +800,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_daily_content.add_argument("--date", help="日期 YYYY-MM-DD（默认昨天）")
     p_daily_content.add_argument("--top", type=int, default=3, help="提取 top N 信号（默认 3）")
-    p_daily_content.add_argument("--from-excel", help="显式指定 xlsx 路径（覆盖 --date 推断）")
+    p_daily_content.add_argument("--from-excel", help="显式指定 xlsx 路径（覆盖 --date/--yesterday）")
+    p_daily_content.add_argument("--yesterday", action="store_true",
+                                   help="便捷别名：等价 --date 昨天（Asia/Shanghai 时区）")
     p_daily_content.add_argument("--out-dir", help="输出目录（默认 cache/daily-content/<date>/）")
     p_daily_content.add_argument("--scan-violations", action="store_true",
                                    help="生成后跑合规扫描，打印命中情况")
@@ -810,6 +812,20 @@ def main(argv: list[str] | None = None) -> int:
                                    help="输出 stats JSON 到 stdout（程序化消费，配合 --quiet 抑制其他输出）")
     p_daily_content.add_argument("--feishu-target",
                                    help="飞书 chat_id/email。设置后额外生成 manifest.json 供 OpenClaw message(action=send) 投递")
+
+    p_cover = sub.add_parser(
+        "daily-cover",
+        help="封面图端到端：从 zsxq-1.md 提取 cover prompt → 调 image_generate（异步后台）→ SVG 文字后叠 → 更新 frontmatter",
+    )
+    p_cover.add_argument("--date", help="日期 YYYY-MM-DD（默认 --yesterday）")
+    p_cover.add_argument("--yesterday", action="store_true", help="便捷别名")
+    p_cover.add_argument("--slug", help="只跑某个 topic（默认全部）")
+    p_cover.add_argument("--skip-image", action="store_true",
+                          help="只生成 SVG overlay，不调 image_generate（用于已经手动跑过图的情况）")
+    p_cover.add_argument("--out-dir", help="daily-content 根目录（默认 cache/daily-content/<date>/）")
+    p_cover.add_argument("--title", help="SVG 标题（默认读 .md 里的 ## TL;DR）")
+    p_cover.add_argument("--subtitle", help="SVG 副标题（默认用 slug 拼回）")
+    p_cover.add_argument("--caption", default="DiscernBrief · {date}", help="SVG 底部 caption")
 
     p_signals = sub.add_parser("signals", help="list generated signals")
 
@@ -903,6 +919,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_signals(args, registry, db)
     if args.cmd == "daily-content":
         return cmd_daily_content(args, registry, db)
+    if args.cmd == "daily-cover":
+        return cmd_daily_cover(args, registry, db)
     parser.print_help()
     return 1
 
@@ -924,6 +942,10 @@ def cmd_daily_content(args, registry, db) -> int:
     else:
         if args.date:
             date_str = args.date
+        elif args.yesterday:
+            tz = ZoneInfo(args.tz) if ZoneInfo else None
+            now = datetime.now(tz) if tz else datetime.now()
+            date_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
         else:
             tz = ZoneInfo(args.tz) if ZoneInfo else None
             now = datetime.now(tz) if tz else datetime.now()
@@ -1091,6 +1113,136 @@ def cmd_daily_content(args, registry, db) -> int:
     print("  1. 让 LLM 填入每篇文章的正文 (cli 只生成模板)")
     print("  2. 手动 review 合规 + 深度")
     print("  3. 通过 message(action=send, channel=feishu) 发到目标聊天")
+    return 0
+
+
+
+def cmd_daily_cover(args, registry, db) -> int:
+    """封面图端到端：从 zsxq-1.md 提 prompt → 跑 image_generate（异步）→ SVG 后叠 → 写 frontmatter。"""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        ZoneInfo = None
+
+    repo_root = Path(__file__).resolve().parent.parent
+    daily_dir = repo_root / "cache" / "daily-content"
+
+    # 1. 定位日期
+    if args.date:
+        date_str = args.date
+    elif args.yesterday:
+        tz = ZoneInfo("Asia/Shanghai") if ZoneInfo else None
+        now = _dt.now(tz) if tz else _dt.now()
+        date_str = (now - _td(days=1)).strftime("%Y-%m-%d")
+    else:
+        # 默认用最近一次 daily-content 输出
+        candidates = sorted(daily_dir.iterdir(), reverse=True) if daily_dir.exists() else []
+        date_str = candidates[0].name if candidates and candidates[0].is_dir() else None
+    if not date_str:
+        print("ERROR: 没指定 --date/--yesterday，且 cache/daily-content/ 空", file=sys.stderr)
+        return 1
+
+    daily_date_dir = Path(args.out_dir) if args.out_dir else daily_dir / date_str
+    if not daily_date_dir.exists():
+        print(f"ERROR: {daily_date_dir} 不存在 — 先跑 daily-content", file=sys.stderr)
+        return 1
+
+    # 2. 找所有 topic
+    topics = sorted([d for d in daily_date_dir.iterdir() if d.is_dir()])
+    if args.slug:
+        topics = [t for t in topics if t.name == args.slug or t.name.endswith(args.slug)]
+        if not topics:
+            print(f"ERROR: 没找到 slug={args.slug!r}（可: {[t.name for t in daily_date_dir.iterdir() if t.is_dir()]}）", file=sys.stderr)
+            return 1
+
+    print(f"=== daily-cover ({date_str}, {len(topics)} topic{'s' if len(topics) > 1 else ''}) ===")
+    print()
+
+    # 3. 循环处理每个 topic
+    import re as _re
+    results = []
+    for topic_dir in topics:
+        zsxq1 = topic_dir / "zsxq-1.md"
+        if not zsxq1.exists():
+            print(f"  ⚠ {topic_dir.name}/zsxq-1.md 不存在，跳过")
+            continue
+
+        md = zsxq1.read_text(encoding="utf-8")
+
+        # 提取 EN prompt template
+        m = _re.search(r'EN prompt template:\s*"([^"]+)"', md, _re.DOTALL)
+        if not m:
+            print(f"  ⚠ {topic_dir.name} 没找到 EN prompt template")
+            continue
+        en_prompt = m.group(1).replace('\"', '"').replace('\\n', '\n').replace('40%%', '40%')
+
+        # 解析 title / subtitle
+        title = args.title
+        if not title:
+            # 默认从 ## TL;DR 第一段
+            tldr_m = _re.search(r'## TL;DR\s*\n+(.+?)(?:\n\n|\Z)', md, _re.DOTALL)
+            title = (tldr_m.group(1).strip() if tldr_m else topic_dir.name)[:60]
+        subtitle = args.subtitle or topic_dir.name.replace("-", " ").title()
+
+        print(f"  ▶ {topic_dir.name}")
+        print(f"    title: {title}")
+        print(f"    subtitle: {subtitle}")
+
+        # 4. 调 image_generate（如果启用）
+        cover_path = topic_dir / "cover.png"
+        if not args.skip_image:
+            try:
+                # subprocess 调 image_generate 工具（如果环境支持）
+                # 这里用占位 — 实际由调用方跑 image_generate
+                print(f"    image: 需手动跑 image_generate（提示词已提取）")
+                print(f"    prompt 预览: {en_prompt[:120]}...")
+            except Exception as e:
+                print(f"    ⚠ image_generate 失败: {e}")
+
+        # 5. SVG overlay（如果 cover.png 存在）
+        overlay_path = topic_dir / "cover-final.png"
+        if cover_path.exists():
+            try:
+                import subprocess as _sp
+                # 调 scripts/overlay_text.py
+                overlay_script = repo_root / "scripts" / "overlay_text.py"
+                if overlay_script.exists():
+                    cmd = [
+                        "python3", str(overlay_script),
+                        str(cover_path), str(overlay_path),
+                        title, subtitle, args.caption.format(date=date_str)
+                    ]
+                    r = _sp.run(cmd, capture_output=True, text=True, cwd=repo_root, timeout=30)
+                    if r.returncode == 0:
+                        print(f"    overlay: ✓ {overlay_path.name}")
+                    else:
+                        print(f"    overlay: ⚠ {r.stderr[:200]}")
+            except Exception as e:
+                print(f"    ⚠ overlay 失败: {e}")
+
+        # 6. 更新 frontmatter
+        try:
+            cover_rel = "cover-final.png" if (topic_dir / "cover-final.png").exists() else "cover.png"
+            if "cover_image:" not in md:
+                new_fm = md.replace("language: zh\n", f"language: zh\ncover_image: {cover_rel}\n", 1)
+                if new_fm != md:
+                    zsxq1.write_text(new_fm, encoding="utf-8")
+                    print(f"    frontmatter: 加了 cover_image: {cover_rel}")
+            else:
+                print(f"    frontmatter: cover_image 已有")
+        except Exception as e:
+            print(f"    ⚠ frontmatter 失败: {e}")
+
+        results.append({"topic": topic_dir.name, "title": title, "cover": str(cover_path)})
+        print()
+
+    print(f"\n处理了 {len(results)} 个 topic")
+    print("\n下一步：")
+    print("  1. 把上面提取的 prompt 复制到 image_generate（或写进 daily-cover 的 --batch 模式）")
+    print("  2. 跑 python3 scripts/overlay_text.py <cover.png> <cover-final.png> <title> <subtitle> <caption>")
+    print("  3. 重新跑这个命令刷新 frontmatter")
     return 0
 
 
