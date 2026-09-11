@@ -22,6 +22,8 @@ from .db import Database
 from .dedup import dedup_by_title
 from .models import RunResult
 from .normalize import normalize_many
+from .content import generate_daily_content, load_signals_from_xlsx
+from .compliance import scan_violations
 
 def locate_radar_dir():
     """Auto-discover the DiscernBrief project dir. Honors $DISCERNBRIEF_DIR first."""
@@ -792,6 +794,19 @@ def main(argv: list[str] | None = None) -> int:
     p_export.add_argument("--tz", default="Asia/Shanghai",
                           help="IANA timezone for --daily date stamp (default: Asia/Shanghai)")
 
+    p_daily_content = sub.add_parser(
+        "daily-content",
+        help="从昨日 Excel 提取 top 信号 + 生成知识星球/小红书/即刻发布模板（含 AI 合规标识 + 风险提示）",
+    )
+    p_daily_content.add_argument("--date", help="日期 YYYY-MM-DD（默认昨天）")
+    p_daily_content.add_argument("--top", type=int, default=3, help="提取 top N 信号（默认 3）")
+    p_daily_content.add_argument("--from-excel", help="显式指定 xlsx 路径（覆盖 --date 推断）")
+    p_daily_content.add_argument("--out-dir", help="输出目录（默认 cache/daily-content/<date>/）")
+    p_daily_content.add_argument("--scan-violations", action="store_true",
+                                   help="同时跑合规扫描，打印命中情况")
+    p_daily_content.add_argument("--feishu-target",
+                                   help="飞书 chat_id/email。设置后额外生成 manifest.json 供 OpenClaw message(action=send) 投递")
+
     p_signals = sub.add_parser("signals", help="list generated signals")
 
 
@@ -882,9 +897,133 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ingest_signals(args, registry, db)
     if args.cmd == "signals":
         return cmd_signals(args, registry, db)
+    if args.cmd == "daily-content":
+        return cmd_daily_content(args, registry, db)
     parser.print_help()
     return 1
 
+
+def cmd_daily_content(args, registry, db) -> int:
+    """从昨日 Excel 提取 top 信号 → 知识星球/小红书/即刻 发布模板（含合规标识）。"""
+    from datetime import datetime, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        ZoneInfo = None
+
+    repo_root = Path(__file__).resolve().parent.parent
+    cache_dir = repo_root / "cache" / "excel"
+
+    # 1. 定位 xlsx
+    if args.from_excel:
+        xlsx_path = Path(args.from_excel).expanduser()
+    else:
+        if args.date:
+            date_str = args.date
+        else:
+            tz = ZoneInfo(args.tz) if ZoneInfo else None
+            now = datetime.now(tz) if tz else datetime.now()
+            date_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        xlsx_path = cache_dir / date_str / f"DiscernBrief-{date_str}.xlsx"
+
+    if not xlsx_path.exists():
+        print(f"ERROR: Excel not found: {xlsx_path}", file=sys.stderr)
+        print(f"  生成方式:  discernbrief export-xlsx --days 1 --daily", file=sys.stderr)
+        return 2
+
+    # 2. 输出目录
+    if args.out_dir:
+        out_dir = Path(args.out_dir).expanduser()
+    else:
+        date_str = xlsx_path.stem.replace("DiscernBrief-", "")
+        out_dir = repo_root / "cache" / "daily-content" / date_str
+
+    # 3. 生成
+    print(f"=== daily-content ===")
+    print(f"  source:    {xlsx_path}")
+    print(f"  out_dir:   {out_dir}")
+    print(f"  top_n:     {args.top}")
+    print()
+
+    try:
+        stats = generate_daily_content(xlsx_path, out_dir, top_n=args.top)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    print(f"✓ {stats['selected_count']}/{stats['total_signals']} signals → {len(stats['files'])} files")
+    print()
+    print("Topics:")
+    for t in stats["topics"]:
+        print(f"  #{t['slug']}  [{t['importance']}] {t['title']}")
+    print()
+    print("Files:")
+    for f in stats["files"]:
+        print(f"  {f}")
+
+    # 4. 可选：合规扫描
+    if args.scan_violations:
+        print()
+        print("=== compliance scan ===")
+        total_hits = 0
+        for f in stats["files"]:
+            try:
+                text = Path(f).read_text(encoding="utf-8")
+            except Exception:
+                continue
+            hits = scan_violations(text)
+            if hits:
+                total_hits += len(hits)
+                print(f"  ⚠ {f}:")
+                for h in hits:
+                    print(f"      [{h['severity']}] {h['rule']}: {h['match']!r}")
+        if total_hits == 0:
+            print("  ✓ no violations found")
+
+    # 5. Feishu 投递 manifest（不直接调 OpenClaw，由 cron agent 用 message() 动作投递）
+    if args.feishu_target:
+        import json as _json
+        manifest = {
+            "target": args.feishu_target,
+            "date": stats["date"],
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "topics": [
+                {
+                    "id": t["id"],
+                    "title": t["title"],
+                    "importance": t["importance"],
+                    "slug": t["slug"],
+                    "files": {
+                        "zsxq_articles": [f for f in stats["files"] if "/zsxq-" in f],
+                        "xhs_post": next((f for f in stats["files"] if f.endswith("/xhs.md")), None),
+                        "jike_post": next((f for f in stats["files"] if f.endswith("/jike.md")), None),
+                    },
+                }
+                for t in stats["topics"]
+            ],
+        }
+        manifest_path = out_dir / "feishu-manifest.json"
+        manifest_path.write_text(
+            _json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print()
+        print(f"📨 Feishu manifest: {manifest_path}")
+        print("   OpenClaw agent 投递示例:")
+        for t in stats["topics"]:
+            topic_dir = Path(out_dir) / t["slug"]
+            xhs = topic_dir / "xhs.md"
+            jike = topic_dir / "jike.md"
+            print(f'   message(action=send, channel=feishu, target="{args.feishu_target}", '
+                  f'media=["{xhs}", "{jike}"], '
+                  f'caption="📡 DiscernBrief {stats["date"]} · {t["title"][:30]}...")')
+
+    print()
+    print("Next steps:")
+    print("  1. 让 LLM 填入每篇文章的正文 (cli 只生成模板)")
+    print("  2. 手动 review 合规 + 深度")
+    print("  3. 通过 message(action=send, channel=feishu) 发到目标聊天")
+    return 0
 
 
 def cmd_export_xlsx(args, registry, db) -> int:

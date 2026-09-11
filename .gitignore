@@ -25,3 +25,4 @@ data/*.db-wal
 cache/
 cache/**
 !cache/.gitkeep
+cache/daily-content/

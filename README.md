@@ -19,6 +19,7 @@
 - **`sync-bitable` 已移除**（commit ff3ae94，飞书存储上限 + cron 卡死）：调它现在返回 deprecation 提示 + exit 0
 - **`unsynced` 字段退出 `status` 默认视图**：仍可通过 `discernbrief query --preset summary` 看
 - **`cmd_export_xlsx --daily --tz <iana>`**：支持自定义时区（默认 `Asia/Shanghai`）
+- **`daily-content` 子命令**：从前 24h Excel 提取 top 3 信号 → 知识星球 3 篇（不同角度）+ 小红书 + 即刻，全部带合规标识（AI 显式+隐式+风险提示+付费声明）。可选 `--feishu-target` 输出投递 manifest 给 OpenClaw cron 投递到飞书。
 
 ## 架构
 
@@ -56,6 +57,22 @@
 | slow | `15,45 * * * *` | 3 个 slow 源 (HN+Reddit+GH, ~2min) + STALE GUARD 2h | 静默（只入 DB + 写 cache/excel/）|
 | backup | `0 2 * * *` | SQLite dump + 5 个 .csv + git push | 静默（除非失败）|
 | brief | `0 8 * * *` | export-xlsx 24h + 行业分析 + 深度价值挖掘 | **飞书** Excel + 多张卡 |
+| **daily-content** | `30 7 * * *` | 昨日 top 3 信号 → 知识星球/小红书/即刻 发布模板 + 飞书投递 | **飞书** 多卡 + 附件 |
+
+## 每日内容生成（知识星球 / 小红书 / 即刻）
+
+每天 07:30 cron 跑 `daily-content`，从前 24 小时 Excel 提取 top 3 信号，为每个信号生成：
+- 3 篇知识星球深度文（不同角度：产业链拆解 / 商业模式重估 / 个体影响）
+- 1 篇小红书引流帖
+- 1 篇即刻引流帖
+
+每个 .md 自动带中国法规合规标识（AI 显式 + 隐式 + 风险提示 + 付费声明）。
+
+```bash
+discernbrief daily-content --date $(date -v-1d +%F) --top 3 --feishu-target <chat_id>
+```
+
+详见 SKILL.md STEP 7。
 
 ## Pipeline 详细
 
