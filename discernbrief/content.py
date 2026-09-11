@@ -323,59 +323,82 @@ def _xhs_tags(sig: Signal) -> list[str]:
 # === 图片 prompt 建议（用户原文：「最好都能附图」） ===
 # 由 LLM 在填正文时同时产出，供人类 / DALL-E / Midjourney 生成图。
 # 风格要求：现代信息图风格、商业感、避免真人脸。
-ZSXQ_COVER_PROMPT = """封面图 prompt 建议（用于知识星球付费文头图）：
+ZSXQ_COVER_PROMPT = """封面图 prompt（方案 A：纯图形零文字，后期 SVG 叠加）
 
 主题：{title}
-关键词：{category}, 深度产业链, 商业格局
+视觉意图：把{title}的核心张力（{category}领域的关键转折）抽象成"凝固的数据可视化瞬间"
+配色：深海军蓝背景 (#0F172A / #0a0e27)，单一霓虹强调色
+      类似 The Economist 周末版 / Stratechery / 桥水 Daily Observations 的视觉语言
+构图：1280×720 横版
+  - 中心 1 个绝对主视觉元素（占画面 40% 面积）
+  - 周围 3-5 个支撑性几何元素（线条、圆、矩形、小数据点）
+  - 留出顶部 1/4 和底部 1/4 空白（用于后期 SVG 文字叠加）
+  - 用"留白张力"传达严肃感
 
-风格：现代极简信息图，深色背景（#0F172A / #1E293B），霓虹色调强调关键节点，
-      类似 The Economist / Stratechery 风格
-主体：抽象几何元素 + 数据可视化图表（柱状、流程、关系网）
-      避免真人脸、品牌 logo 侵权
-尺寸：1280×720 (横版) 或 1080×1080 (方版)
-工具：DALL-E 3 / Midjourney v6 / Recraft
+主视觉元素（根据 category 选一种）：
+  - 金融市场/利率类：上升曲线（占主区域 60% 高度）+ 水平阈值线（dashed）+ 曲线下方的渐变填充
+  - 供应链/物流类：两条分叉路径（一虚一实）+ 中间箭头 + 路径上的小圆点
+  - 制裁/地缘类：被切割的同心圆网络 + 切割处的断裂光效
 
-提示词参考（中英双语）：
-EN: "Editorial-style infographic about {title_en}. Modern minimalist design, dark navy
-    background, neon accent colors, abstract geometric shapes representing {category} industry
-    relationships, data visualization elements (bar charts, flow diagrams). No human faces,
-    no brand logos. Inspired by The Economist and Stratechery editorial style. 4K, sharp."
-CN: 「关于 {title_cn} 的编辑风格信息图。现代极简设计，深色背景，霓虹色调强调，
-    抽象几何元素表现 {category_cn} 产业链关系，数据可视化元素（柱状图、流程图、关系网）。
-    无人脸、无品牌 logo。4K 高清。」
+⭐ 关键约束：画面中 NO TEXT、NO NUMBERS、NO LETTERS、NO LOGOS、NO FLAGS
+    所有文字（包括大标题、副标题、数据标签）用 Figma/Illustrator/inkscape 后叠
+    这样文字永远清晰可控、不被 AI 渲染坏
+
+工具：image-01 / DALL-E 3 / Midjourney v6
+
+EN prompt template:
+"Editorial-style geometric data visualization about {title_en}, in the visual language of The Economist weekend cover and Stratechery analytical pieces.
+Modern minimalist composition, deep navy background (#0F172A), single neon accent color, abstract geometric shapes representing {category} industry dynamics.
+A dominant central visual element (curve / network / path deviation) occupying 40%% of frame, surrounded by 3-5 supporting geometric elements (lines, dots, rectangles).
+Generous negative space at top 1/4 and bottom 1/4 of frame for post-production text overlay.
+NO TEXT, NO NUMBERS, NO LETTERS, NO LOGOS, NO FLAGS in the image — all text added later via SVG overlay.
+Inspired by The Economist, Stratechery, Bridgewater Daily Observations. 4K, sharp, high contrast."
 """
 
-XHS_CARDS_PROMPT = """小红书配图 prompt 建议（建议 3-5 张轮播）：
+XHS_CARDS_PROMPT = """小红书配图 prompt（方案 A：5 张零文字，后期 SVG 叠加）
 
-风格：清新信息图 + 高质感排版，深色或米色背景，杂志感
-      适合手机竖屏阅读（3:4 比例）
-工具：DALL-E 3 / 即时设计 / 醒图
+风格统一：清新杂志感 + 高质感信息图（不是 AI 风）
+      深色或米色背景，霓虹/暖色强调
+      适合 1080×1440 竖版手机阅读（3:4）
+工具：DALL-E 3 / 即时设计 / 醒图 / image-01
 
-第 1 张（封面/钩子）：
-  关键词：{title}, 反直觉, 必看
-  排版：大字标题 + 副标题 + 神秘感配色
-第 2 张（核心数据/事实）：
-  关键词：图表, 关键数字, 对比
-  排版：信息图 + 数据可视化
-第 3 张（深度分析）：
-  关键词：{category}, 产业链, 格局
-  排版：流程图 / 关系网
-第 4 张（行动建议）：
-  关键词：CTA, 行动, 普通人
-  排版：3 条要点 + emoji
-第 5 张（钩回）：
-  关键词：主页, 知识星球, 订阅
-  排版：「完整版在主页」+ 二维码
+⭐ 关键约束：每张图 NO TEXT、NO NUMBERS、NO LETTERS
+    所有文字后期 SVG 叠加（封面大标题、副标题、数据标签、CTA 都后加）
 
-尺寸：1080×1440 (3:4)
+5 张轮播的概念框架：
+  第 1 张（封面钩子）：1 个超大抽象图形 + 大量留白（吸引点击）
+  第 2 张（核心数据）：3-5 个渐变色条/区块（暗示"几个数据点对比"）
+  第 3 张（深度分析）：抽象流程图 / 关系网（暗示"产业链/因果链"）
+  第 4 张（行动建议）：2-3 个并列方块（暗示"几个步骤"）
+  第 5 张（钩回/CTA）：1 个大箭头 / 大圆（暗示"指向主页"）
+
+EN prompt template:
+"Vertical 3:4 editorial-style data visualization carousel for Chinese social media (Xiaohongshu/RED).
+5 connected abstract concept cards, modern minimalist design, dark navy background, neon accent colors, The Economist magazine visual language.
+Card themes: (1) abstract eye-catching hook shape (2) gradient color bars/blocks (3) abstract flow diagram/network (4) stacked rectangular steps (5) large directional arrow/circle.
+NO TEXT, NO NUMBERS, NO LETTERS, NO LOGOS in any card. All text added via SVG overlay in post-production.
+1080x1440, sharp, 4K detail, magazine-quality."
 """
 
-JIKE_PROMPT = """即刻配图 prompt 建议（可选，文字版更常见）：
+JIKE_PROMPT = """即刻配图 prompt（方案 A：纯文字海报，NO TEXT in image）
 
-风格：极简文字海报，深色背景，浅色大字，类似即刻用户常见排版
+风格：极简文字海报，深色背景，居中布局
+      即刻用户常见排版，安静感 + 思考感
       优先文字版（无图），如果一定要配图就 1:1 方形概念图
-工具：即时设计 / Figma
+工具：image-01 / 即时设计 / Figma
 
-提示：「关于 {title} 的极简概念图，深色背景，居中布局，
-      上方大字标题，下方一行小字注解。1080×1080。」
+⭐ 关键约束：NO TEXT、NO LETTERS
+    文字完全在 Figma 后叠（不靠 AI 渲染）
+
+概念框架：
+  - 上半部分：1 个大型几何形状（圆/方/三角）暗示主题张力
+  - 下半部分：留白
+  - 整张图：极简，安静，"看完想停下来想一想"的感觉
+
+EN prompt template:
+"Minimalist 1:1 square abstract concept poster for Chinese social media (Jike).
+Pure geometric composition, no text. Single dominant shape (circle, square, or triangle) in upper half, generous white space in lower half for post-production text overlay.
+Dark muted background, single accent color. Quiet, contemplative mood.
+NO TEXT, NO LETTERS, NO NUMBERS, NO LOGOS. All text added via SVG overlay.
+1080x1080, sharp, magazine-quality, 4K."
 """
