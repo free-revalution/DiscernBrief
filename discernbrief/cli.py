@@ -31,8 +31,8 @@ def locate_radar_dir():
     if env and Path(env).exists():
         return Path(env)
     candidates = [
-        Path.home() / ".openclbrief" / "workspace" / "skills" / "discernbrief",
         Path.home() / ".openclaw" / "workspace" / "projects" / "DiscernBrief",
+        Path.home() / ".openclaw" / "workspace" / "skills" / "discernbrief",
         Path.home() / "Projects" / "DiscernBrief",
         Path("/tmp/DiscernBrief_pkg"),
         Path.cwd(),
@@ -68,7 +68,12 @@ def cmd_status(args, registry, db) -> int:
     disabled = len([s for s in registry.all() if not s.enabled])
     print(f"DB:           {db.path}")
     print(f"raw_items:    {total_items}")
-    print(f"signals:      {total_signals}  (unsynced: {unsynced})")
+    # sync-bitable removed in commit ff3ae94; unsynced is no longer decremented anywhere.
+    # Kept as a deprecated counter for backward compat; daily export-xlsx covers sharing.
+    if unsynced:
+        print(f"signals:      {total_signals}  (unsynced: {unsynced} — deprecated since ff3ae94; export-xlsx --daily for daily archive)")
+    else:
+        print(f"signals:      {total_signals}")
     print(f"enabled:      {enabled} / {len(registry)} sources  (auto-disabled: {disabled})")
     print(f"recent runs:")
     for r in runs:
