@@ -38,8 +38,14 @@ PAID_CONTENT_DISCLAIMER = (
     "> 转载请联系作者保留署名权与完整免责声明。\n"
 )
 
-STOCK_CODE_RE = re.compile(r"\b(?:[60]\d{5}|[39]\d{5})\b")
-HK_STOCK_RE = re.compile(r"\bHK\s?\d{4,5}\b", re.IGNORECASE)
+# 排除前位 . / - / : / _ / 字母（避免时间戳 04:07:05.667556 误报）
+STOCK_CODE_RE = re.compile(
+    r"(?<![\w.\-:/_])(?:[60]\d{5}|[39]\d{5})(?![\d.\-:/])"
+)
+HK_STOCK_RE = re.compile(
+    r"(?<![\w])HK[\s-]?\d{4,5}(?![\d])",
+    re.IGNORECASE,
+)
 BUY_SELL_RE = re.compile(
     r"(买入|卖出|建仓|加仓|减仓|清仓|目标价|止损位|建议.{0,4}(买|卖|持有)|"
     r"now\s+is\s+the\s+time\s+to\s+(buy|sell)|recommend\s+(buy|sell))",

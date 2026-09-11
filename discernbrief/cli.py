@@ -803,7 +803,9 @@ def main(argv: list[str] | None = None) -> int:
     p_daily_content.add_argument("--from-excel", help="显式指定 xlsx 路径（覆盖 --date 推断）")
     p_daily_content.add_argument("--out-dir", help="输出目录（默认 cache/daily-content/<date>/）")
     p_daily_content.add_argument("--scan-violations", action="store_true",
-                                   help="同时跑合规扫描，打印命中情况")
+                                   help="生成后跑合规扫描，打印命中情况")
+    p_daily_content.add_argument("--dry-run", action="store_true",
+                                   help="只打印计划生成哪些文件，不写盘（用于 cron 调试）")
     p_daily_content.add_argument("--feishu-target",
                                    help="飞书 chat_id/email。设置后额外生成 manifest.json 供 OpenClaw message(action=send) 投递")
 
@@ -943,7 +945,25 @@ def cmd_daily_content(args, registry, db) -> int:
     print(f"  source:    {xlsx_path}")
     print(f"  out_dir:   {out_dir}")
     print(f"  top_n:     {args.top}")
+    print(f"  dry_run:   {args.dry_run}")
     print()
+
+    if args.dry_run:
+        # Dry-run: 只预览会写哪些文件，不实际写
+        try:
+            from .content import load_signals_from_xlsx, rank_signals
+            signals = load_signals_from_xlsx(xlsx_path)
+            top = rank_signals(signals, args.top)
+            print(f"[dry-run] {len(top)}/{len(signals)} signals would be generated")
+            for i, sig in enumerate(top, 1):
+                slug = f"{i:02d}-{sig.slug}"
+                print(f"  #{slug}  [{sig.importance}] {sig.title}")
+                print(f"     would write: {out_dir}/{slug}/{{zsxq-1.md, zsxq-2.md, zsxq-3.md, xhs.md, jike.md}}")
+            print(f"  would also write: {out_dir}/brief.md")
+            return 0
+        except Exception as e:
+            print(f"ERROR (dry-run): {e}", file=sys.stderr)
+            return 1
 
     try:
         stats = generate_daily_content(xlsx_path, out_dir, top_n=args.top)
@@ -994,9 +1014,21 @@ def cmd_daily_content(args, registry, db) -> int:
                     "importance": t["importance"],
                     "slug": t["slug"],
                     "files": {
-                        "zsxq_articles": [f for f in stats["files"] if "/zsxq-" in f],
-                        "xhs_post": next((f for f in stats["files"] if f.endswith("/xhs.md")), None),
-                        "jike_post": next((f for f in stats["files"] if f.endswith("/jike.md")), None),
+                        # 按 topic slug 过滤（之前 bug：所有 topic 共用同一份文件列表）
+                        "zsxq_articles": [
+                            f for f in stats["files"]
+                            if f"/{t['slug']}/zsxq-" in f
+                        ],
+                        "xhs_post": next(
+                            (f for f in stats["files"]
+                             if f"/{t['slug']}/xhs.md" in f),
+                            None,
+                        ),
+                        "jike_post": next(
+                            (f for f in stats["files"]
+                             if f"/{t['slug']}/jike.md" in f),
+                            None,
+                        ),
                     },
                 }
                 for t in stats["topics"]
