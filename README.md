@@ -4,7 +4,7 @@
 
 > Spec: [`SPEC.md`](./SPEC.md) · Skill: `DiscernBrief` (skill_workshop) · 
 > Repo: https://github.com/free-revalution/DiscernBrief
-> Status (2026-09-09): Phase 1–6 + Phase 7 (daily 08:00 brief) + Phase 9 (scheduling). Phase 8 (bot) deferred.
+> Status (2026-09-11): Pipeline 健康（24h 实测 9/11 cycle 成功）。**`sync-bitable` 已移除**（commit ff3ae94，飞书 5000 行上限 + cron 卡死）；改用 `export-xlsx --daily` 按日归档到 `cache/excel/<日期>/`。Phase 8 (bot) deferred.
 
 ## 设计哲学
 
@@ -13,6 +13,13 @@
 - **08:00 daily brief** — Excel 全量 + 行业分析卡 + 深度价值挖掘卡，固定每天一次
 - **不阻塞对话控制** — 所有 4 个 automation 都在 `current` session，可正常 `/discernbrief` 调
 
+## Recent Updates
+
+- **`cache/` 目录**：`export-xlsx --daily` 按 `cache/excel/YYYY-MM-DD/DiscernBrief-YYYY-MM-DD.xlsx` 自动归档（不再需要手填 `--out`）
+- **`sync-bitable` 已移除**（commit ff3ae94，飞书存储上限 + cron 卡死）：调它现在返回 deprecation 提示 + exit 0
+- **`unsynced` 字段退出 `status` 默认视图**：仍可通过 `discernbrief query --preset summary` 看
+- **`cmd_export_xlsx --daily --tz <iana>`**：支持自定义时区（默认 `Asia/Shanghai`）
+
 ## 架构
 
 ```
@@ -20,8 +27,8 @@
    │                                    │
    │  fast cycle  ──┐                 │
    │  (15 src)      │  ingest →        │
-   │  (~30s)        │  SQLite  +       │
-   │                │  Feishu Bitable   │
+   │  (~30s)        │  SQLite +         │
+   │                │  cache/excel/     │
    │  slow cycle ──┘                  │
    │  (3 src, 30s-2min)              │
    │  + STALE GUARD 2h               │
@@ -45,8 +52,8 @@
 
 | ID 简写 | cron | 行为 | 飞书输出 |
 |---|---|---|---|
-| fast | `*/30 * * * *` | 15 个 fast 源 (RSS, ~30s) | 静默（只入 DB + 推 Bitable）|
-| slow | `15,45 * * * *` | 3 个 slow 源 (HN+Reddit+GH, ~2min) + STALE GUARD 2h | 静默（只入 DB + 推 Bitable）|
+| fast | `*/30 * * * *` | 15 个 fast 源 (RSS, ~30s) | 静默（只入 DB + 写 cache/excel/）|
+| slow | `15,45 * * * *` | 3 个 slow 源 (HN+Reddit+GH, ~2min) + STALE GUARD 2h | 静默（只入 DB + 写 cache/excel/）|
 | backup | `0 2 * * *` | SQLite dump + 5 个 .csv + git push | 静默（除非失败）|
 | brief | `0 8 * * *` | export-xlsx 24h + 行业分析 + 深度价值挖掘 | **飞书** Excel + 多张卡 |
 
@@ -64,7 +71,7 @@ python3 -m discernbrief.cli run-cycle --tier fast   # ~30s
 # 读 /tmp/radar_pending-{fast,slow}.json
 # 判每条 → 写 /tmp/radar_judged.json
 # ingest-signals → DB
-# sync-bitable → Feishu Bitable (Data + Opportunities 两表)
+# → cache/excel/<YYYY-MM-DD>/ (auto-dated by --daily mode)
 # ⚠️ 不发飞书 card（避免 spam）
 ```
 
@@ -141,7 +148,7 @@ python3 -m discernbrief.cli query --sql "SELECT ..."
 
 # 备份 + 飞书 Bitable 同步
 python3 -m discernbrief.cli backup --out ./backups --push
-python3 -m discernbrief.cli sync-bitable
+# sync-bitable 已移除（commit ff3ae94），用 export-xlsx --daily 代替
 ```
 
 ## 数据模型
@@ -182,7 +189,14 @@ python3 -m discernbrief.cli sync-bitable
 ## 飞书同步（已废弃）
 
 项目不再支持飞书 Bitable 同步 — 之前因为 5000 行上限 + cron 触发 → 反复 ModuleNotFoundError 卡死飞书。
-数据现在只存本地 SQLite，导出走 `export-xlsx`。
+数据现在只存本地 SQLite + `cache/excel/<日期>/`，按日归档：
+
+```bash
+discernbrief export-xlsx --days 1 --daily
+# → cache/excel/2026-09-11/DiscernBrief-2026-09-11.xlsx
+```
+
+调用 `sync-bitable` 现在会返回 deprecation 提示（exit 0）而不是 `invalid choice` 错误。
 
 ## 已知限制
 
