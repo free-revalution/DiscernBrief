@@ -97,6 +97,44 @@ def rank_signals(signals: Iterable[Signal], top_n: int = 3) -> list[Signal]:
     return sorted(signals, key=lambda s: (s.priority, -s.confidence))[:top_n]
 
 
+def _signal_fingerprint(s: Signal) -> str:
+    """用标题+首 source_url 做去重指纹。"""
+    import re as _re
+    title_key = _re.sub(r'[^\w\u4e00-\u9fff]+', '', s.title.lower())[:30]
+    url_key = s.source_urls.split(',')[0].strip() if s.source_urls else ''
+    return f"{title_key}|{url_key}"
+
+
+def dedup_signals(signals: list[Signal]) -> list[Signal]:
+    """同源/近标题去重，保留 priority+confidence 最高的那条。
+
+    逻辑：
+    - 同一指纹（title + 第一个 source_url）只保留 best
+    - 不同信号但 fingerprint 一致 → 当同源
+    - 用法：rank_signals 后调用，确保 top N 都是不同故事
+    """
+    from collections import OrderedDict
+    seen: dict[str, Signal] = OrderedDict()
+    for s in signals:
+        fp = _signal_fingerprint(s)
+        if fp in seen:
+            existing = seen[fp]
+            # "s 比 existing 好" = priority 更小(HIGH<LOW) 且 confidence 更大
+            # 用 (-priority, confidence) 排序：越小越差，越大越好
+            if (-s.priority, s.confidence) > (-existing.priority, existing.confidence):
+                seen[fp] = s
+        else:
+            seen[fp] = s
+    return list(seen.values())
+
+
+def rank_signals_deduped(signals: Iterable[Signal], top_n: int = 3) -> list[Signal]:
+    """排序 + 去重。推荐替代 rank_signals。"""
+    ranked = rank_signals(list(signals), top_n * 3)
+    deduped = dedup_signals(ranked)
+    return deduped[:top_n]
+
+
 ZSXQ_ANGLE_TEMPLATES = [
     {"title": "深度产业链拆解", "outline": [
         "## 这件事的本质是什么？",
