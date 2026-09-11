@@ -68,12 +68,10 @@ def cmd_status(args, registry, db) -> int:
     disabled = len([s for s in registry.all() if not s.enabled])
     print(f"DB:           {db.path}")
     print(f"raw_items:    {total_items}")
-    # sync-bitable removed in commit ff3ae94; unsynced is no longer decremented anywhere.
-    # Kept as a deprecated counter for backward compat; daily export-xlsx covers sharing.
-    if unsynced:
-        print(f"signals:      {total_signals}  (unsynced: {unsynced} — deprecated since ff3ae94; export-xlsx --daily for daily archive)")
-    else:
-        print(f"signals:      {total_signals}")
+    # 'unsynced' is a deprecated counter: sync-bitable was removed in ff3ae94
+    # so this field only grows. Suppress it from the default view; use
+    # 'discernbrief query --preset summary' to see full breakdown.
+    print(f"signals:      {total_signals}")
     print(f"enabled:      {enabled} / {len(registry)} sources  (auto-disabled: {disabled})")
     print(f"recent runs:")
     for r in runs:
@@ -721,6 +719,15 @@ def cmd_signals(args, registry, db) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Intercept deprecated commands before argparse sees them. This keeps them
+    # out of --help output entirely (no subparser pollution) and gives callers
+    # a clean exit instead of an "invalid choice" traceback.
+    if argv and argv[0] == "sync-bitable":
+        print("⚠ sync-bitable was removed in commit ff3ae94 (feishu storage limits).")
+        print("  Use:  discernbrief export-xlsx --days 1 --daily")
+        print("        → cache/excel/$(date +%F)/DiscernBrief-$(date +%F).xlsx")
+        return 0
+
     parser = argparse.ArgumentParser(prog="radar", description="AI Opportunity Radar CLI")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="path to sources.yaml")
     parser.add_argument("--db", default=str(DEFAULT_DB), help="path to SQLite db")
@@ -960,4 +967,5 @@ def cmd_export_xlsx(args, registry, db) -> int:
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # sys.argv[0] is the module name; pass [1:] so main() sees only user args.
+    sys.exit(main(sys.argv[1:]))
