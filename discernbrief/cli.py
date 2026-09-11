@@ -806,6 +806,8 @@ def main(argv: list[str] | None = None) -> int:
                                    help="生成后跑合规扫描，打印命中情况")
     p_daily_content.add_argument("--dry-run", action="store_true",
                                    help="只打印计划生成哪些文件，不写盘（用于 cron 调试）")
+    p_daily_content.add_argument("--json", action="store_true",
+                                   help="输出 stats JSON 到 stdout（程序化消费，配合 --quiet 抑制其他输出）")
     p_daily_content.add_argument("--feishu-target",
                                    help="飞书 chat_id/email。设置后额外生成 manifest.json 供 OpenClaw message(action=send) 投递")
 
@@ -941,6 +943,40 @@ def cmd_daily_content(args, registry, db) -> int:
         out_dir = repo_root / "cache" / "daily-content" / date_str
 
     # 3. 生成
+    # --json 模式：只在 stats 部分打 JSON，其他输出到 stderr
+    # 便于 cron agent pipe stdout 拿结构化数据
+    import json as _json
+    import sys as _sys
+
+    if args.json:
+        # 提前做 stats 计算（在 dry-run 短路之前）
+        from .content import load_signals_from_xlsx, rank_signals
+        try:
+            signals = load_signals_from_xlsx(xlsx_path)
+            top = rank_signals(signals, args.top)
+            stats_for_json = {
+                "date": xlsx_path.stem.replace("DiscernBrief-", ""),
+                "source": str(xlsx_path),
+                "out_dir": str(out_dir),
+                "top_n": args.top,
+                "dry_run": args.dry_run,
+                "feishu_target": args.feishu_target,
+                "total_signals": len(signals),
+                "selected_count": len(top),
+                "topics": [
+                    {"id": s.id, "title": s.title, "importance": s.importance,
+                     "slug": f"{i+1:02d}-{s.slug}", "confidence": s.confidence,
+                     "category": s.category}
+                    for i, s in enumerate(top)
+                ],
+            }
+            _sys.stdout.write(_json.dumps(stats_for_json, ensure_ascii=False, indent=2) + "\n")
+            _sys.stdout.flush()
+            return 0 if args.dry_run else None  # dry-run 完成返回；非 dry-run 继续到下面
+        except Exception as e:
+            _sys.stderr.write(f"ERROR: {e}\n")
+            return 1
+
     print(f"=== daily-content ===")
     print(f"  source:    {xlsx_path}")
     print(f"  out_dir:   {out_dir}")
